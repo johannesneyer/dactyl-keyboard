@@ -63,16 +63,14 @@
 ;; Switch Hole ;;
 ;;;;;;;;;;;;;;;;;
 
-(def keyswitch-height 14.20) ;; Was 14.1, then 14.25
-(def keyswitch-width 14.20)
+(def keyswitch-height 14.4) ;; Was 14.1, then 14.25
+(def keyswitch-width 14.4)
 
 (def sa-profile-key-height 12.7)
 
 (def plate-thickness 4)
 (def mount-width (+ keyswitch-width 3))
 (def mount-height (+ keyswitch-height 3))
-
-(def kailh-socket-thickness 3.5)
 
 (defn single-plate [mirror-socket-cradle]
   (let [top-wall (->> (cube (+ keyswitch-width 3) 1.5 plate-thickness)
@@ -83,25 +81,18 @@
                        (translate [(+ (/ 1.5 2) (/ keyswitch-width 2))
                                    0
                                    (/ plate-thickness 2)]))
-        kailh-cutout (->> (cube (/ keyswitch-width 3) 1.6 (+ plate-thickness 1))
-                          (translate [0
-                                  (+ (/ 1.5 2) (+ (/ keyswitch-height 2)))
-                                  (/ plate-thickness)]))
-        kailh-socket-cradle (difference 
-                                (union 
-                                    (->>  (cube (+ keyswitch-width 3.5) 1.5 2.875)
-                                          (translate [0
-                                                    (- (+ (/ 1.5 2) (/ keyswitch-height 2)))
-                                                    (- 0.9375)]))
-                                    (->>  (cube 3 5.5 1.25)
-                                          (translate [0.5 (- 5.85) (- 1.75)]))))                                                            
-        plate-half (union (difference top-wall kailh-cutout) left-wall)]
+        side-nub (->> (binding [*fn* 30] (cylinder 1 2.75))
+                      (rotate (/ π 2) [1 0 0])
+                      (translate [(+ (/ keyswitch-width 2)) 0 1])
+                      (hull (->> (cube 1.5 2.75 plate-thickness)
+                                 (translate [(+ (/ 1.5 2) (/ keyswitch-width 2))
+                                             0
+                                             (/ plate-thickness 2)]))))
+        plate-half (union (difference top-wall) left-wall (with-fn 100 side-nub))]
     (union plate-half
            (->> plate-half
                 (mirror [1 0 0])
                 (mirror [0 1 0]))
-          (->> kailh-socket-cradle
-                (mirror [(if mirror-socket-cradle 1 0) 0 0]))               
     )))
 
 ;;;;;;;;;;;;;;;;
@@ -593,18 +584,25 @@
   ))
 
 
+(def rj9-width 10.3)
+(def rj9-height 17.8)
+(def rj9-depth 10.4)
+(def rj9-thickness 4)
 (def rj9-start  (map + [0 -3  0] (key-position 0 0 (map + (wall-locate3 0 1) [0 (/ mount-height  2) 0]))))
-(def rj9-position  [(first rj9-start) (second rj9-start) 11])
-(def rj9-cube   (cube 14.78 13 22.38))
+(def rj9-position  [(first rj9-start) (second rj9-start) (/ (+ rj9-height rj9-thickness) 2)])
+(def rj9-cube   (cube (+ rj9-width rj9-thickness) (+ rj9-depth rj9-thickness) (+ rj9-height rj9-thickness)))
 (def rj9-space  (translate rj9-position rj9-cube))
 (def rj9-holder (translate rj9-position
                   (difference rj9-cube
-                              (union (translate [0 2 0] (cube 10.78  9 18.38))
-                                     (translate [0 0 5] (cube 10.78 13  5))))))
+                              (union (translate [0 2 0] (cube rj9-width rj9-depth rj9-height))
+                                     (translate [0 0 6] (cube rj9-width (+ rj9-depth rj9-thickness)  5))))))
 
-(def usb-holder-position (key-position 1 0 (map + (wall-locate2 0 1) [0 (/ mount-height 2) 0])))
-(def usb-holder-size [6.5 10.0 13.6])
+(def usb-width 8.2)
+(def usb-height 11.6)
+(def usb-depth 11)
 (def usb-holder-thickness 4)
+(def usb-holder-position (key-position 1 0 (map + (wall-locate2 0 1) [0 (/ mount-height 2) 0])))
+(def usb-holder-size [usb-width usb-depth usb-height])
 (def usb-holder
     (->> (cube (+ (first usb-holder-size) usb-holder-thickness) (second usb-holder-size) (+ (last usb-holder-size) usb-holder-thickness))
          (translate [(first usb-holder-position) (second usb-holder-position) (/ (+ (last usb-holder-size) usb-holder-thickness) 2)])))
@@ -612,46 +610,53 @@
     (->> (apply cube usb-holder-size)
          (translate [(first usb-holder-position) (second usb-holder-position) (/ (+ (last usb-holder-size) usb-holder-thickness) 2)])))
 
-(def teensy-width 20)  
-(def teensy-height 12)
-(def teensy-length 33)
-(def teensy2-length 53)
-(def teensy-pcb-thickness 2) 
-(def teensy-offset-height 5)
-(def teensy-top-xy (key-position 0 (- centerrow 1) (wall-locate3 -1 0)))
-(def teensy-bot-xy (key-position 0 (+ centerrow 1) (wall-locate3 -1 0)))
+(defn screw-insert-shape [bottom-radius top-radius height offset]
+  (union (binding [*fn* 10] (translate [0 0 (- 0 (/ offset 2))] (cylinder [bottom-radius top-radius] (+ height offset))))
+         (binding [*fn* 10] (translate [0 0 (/ height 2)] (sphere top-radius)))
+  )
+)
+(def screw-insert-screw-head
+  (translate [0 0 -1] (binding [*fn* 10] (cylinder [2.75 2.75] (+ 2 2))))
+)
 
-(defn screw-insert-shape [bottom-radius top-radius height] 
-   (union (cylinder [bottom-radius top-radius] height)
-          (translate [0 0 (/ height 2)] (sphere top-radius))))
+;(defn screw-insert [column row bottom-radius top-radius height offset]
+;  (let [shift-right   (= column lastcol)
+;        shift-left    (= column 0)
+;        shift-up      (and (not (or shift-right shift-left)) (= row 0))
+;        shift-down    (and (not (or shift-right shift-left)) (>= row lastrow))
+;        position      (if shift-up     (key-position column row (map + (wall-locate2  0  0.5) [0 (/ mount-height 2) 0]))
+;                       (if shift-down  (key-position column row (map - (wall-locate2  0 -0.27) [0 (/ mount-height 2) 0]))
+;                        (if shift-left (map + (left-key-position row 0) (wall-locate3 -0.45 0)) 
+;                                       (key-position column row (map + (wall-locate2  0.55  0) [(/ mount-width 2) 0 0])))))
+;        ]
+;    (->> (screw-insert-shape bottom-radius top-radius height offset)
+;         (translate [(first position) (second position) (/ height 2)])
+;    )))
 
-(defn screw-insert [column row bottom-radius top-radius height] 
-  (let [shift-right   (= column lastcol)
-        shift-left    (= column 0)
-        shift-up      (and (not (or shift-right shift-left)) (= row 0))
-        shift-down    (and (not (or shift-right shift-left)) (>= row lastrow))
-        position      (if shift-up     (key-position column row (map + (wall-locate2  0  1) [0 (/ mount-height 2) 0]))
-                       (if shift-down  (key-position column row (map - (wall-locate2  0 -1) [0 (/ mount-height 2) 0]))
-                        (if shift-left (map + (left-key-position row 0) (wall-locate3 -1 0)) 
-                                       (key-position column row (map + (wall-locate2  1  0) [(/ mount-width 2) 0 0])))))
-        ]
-    (->> (screw-insert-shape bottom-radius top-radius height)
-         (translate [(first position) (second position) (/ height 2)])
-    )))
-
-(defn screw-insert-all-shapes [bottom-radius top-radius height]
-  (union (screw-insert 0 0         bottom-radius top-radius height)
-         (screw-insert 0 lastrow   bottom-radius top-radius height)
-         (screw-insert 2 (+ lastrow 0.3)  bottom-radius top-radius height)
-         (screw-insert 3 0         bottom-radius top-radius height)
-         (screw-insert lastcol 1   bottom-radius top-radius height)
-         ))
-(def screw-insert-height 3.8)
-(def screw-insert-bottom-radius (/ 4.5 2))
-(def screw-insert-top-radius (/ 3.5 2))
-(def screw-insert-holes  (screw-insert-all-shapes screw-insert-bottom-radius screw-insert-top-radius screw-insert-height))
-(def screw-insert-outers (screw-insert-all-shapes (+ screw-insert-bottom-radius 1.6) (+ screw-insert-top-radius 1.6) (+ screw-insert-height 1.5)))
-(def screw-insert-screw-holes  (screw-insert-all-shapes 1.7 1.7 350))
+(defn screw-insert-all-shapes [bottom-radius top-radius height offset]
+  (union
+    (translate [-46 58 (/ height 2)] (screw-insert-shape bottom-radius top-radius height offset))
+    (translate [72.2 48.8 (/ height 2)] (screw-insert-shape bottom-radius top-radius height offset))
+    (translate [36.5 -54 (/ height 2)] (screw-insert-shape bottom-radius top-radius height offset))
+    (translate [-24.5 -83 (/ height 2)] (screw-insert-shape bottom-radius top-radius height offset))
+    (translate [-63.1 -48.5 (/ height 2)] (screw-insert-shape bottom-radius top-radius height offset))
+  )
+)
+(defn screw-insert-all-screw-heads [offset]
+  (union
+    (translate [-46 58 offset] screw-insert-screw-head)
+    (translate [72.2 48.8 offset] screw-insert-screw-head)
+    (translate [36.5 -54 offset] screw-insert-screw-head)
+    (translate [-24.5 -83 offset] screw-insert-screw-head)
+    (translate [-63.1 -48.5 offset] screw-insert-screw-head)
+  )
+)
+(def screw-insert-height 5.8)
+(def screw-insert-bottom-radius (/ 4.1 2))
+(def screw-insert-top-radius (/ 4 2))
+(def screw-insert-holes  (screw-insert-all-shapes screw-insert-bottom-radius screw-insert-top-radius screw-insert-height 1))
+(def screw-insert-outers (screw-insert-all-shapes (+ screw-insert-bottom-radius 1.6) (+ screw-insert-top-radius 1.6) (+ screw-insert-height 1.5) 0))
+(def screw-insert-screw-holes (screw-insert-all-shapes 1.5 1.5 100 50))
 
 (defn model [left-side] (difference 
                    (union
@@ -663,13 +668,13 @@
                                        screw-insert-outers 
                                        usb-holder)
                                 rj9-space 
-                                usb-holder-hole
-                                screw-insert-holes)
+                                usb-holder-hole)
                     rj9-holder
                     ; thumbcaps
                     ; caps
                     )
                    (translate [0 0 -20] (cube 350 350 40)) 
+                   screw-insert-holes
                   ))
 
 (spit "things/switch-hole.scad"
@@ -677,43 +682,59 @@
 
 (spit "things/right.scad"
       (write-scad (model false)))
- 
-(spit "things/left.scad"
-      (write-scad (mirror [-1 0 0] (model true))))
-                  
-; (spit "things/right-test.scad"
-;       (write-scad 
-;                    (union
-;                     (key-holes left-side)
-;                     connectors
-;                     thumb
-;                     thumb-connectors
-;                     case-walls 
-;                     thumbcaps
-;                     caps
-;                     rj9-holder
-;                     usb-holder-hole
-;                     ; usb-holder-hole
-;                     ;             screw-insert-outers 
-;                     ;             teensy-screw-insert-holes
-;                     ;             teensy-screw-insert-outers
-;                     ;             usb-cutout 
-;                     ;             rj9-space 
-;                   )))
+
+(def bottom_outline
+  (cut
+    (translate [0 0 -0.001]
+        (union
+          case-walls
+          screw-insert-outers
+        )
+    )
+  )
+)
 
 (spit "things/right-plate.scad"
-      (write-scad 
-                   (cut
-                     (translate [0 0 -0.1]
-                       (difference (union case-walls
-                                          ; rj9-holder
-                                          screw-insert-outers)
-                                   (translate [0 0 -10] screw-insert-screw-holes))
-                  ))))
+  (write-scad
+    (difference
+      (extrude-linear {:height 3.5}
+        bottom_outline
+      )
+      (screw-insert-all-screw-heads -0.75)
+      screw-insert-screw-holes
+    )
+  )
+)
 
-(spit "things/test.scad"
-      (write-scad 
+(spit "things/right-plate-fill.scad"
+  (write-scad
+    (extrude-linear {:height 3.5}
+      (difference
+        (square 300 300)
+        bottom_outline
+      )
+    )
+  )
+)
+
+(spit "things/usb.scad"
+      (write-scad
          (difference usb-holder usb-holder-hole)))
+
+(spit "things/rj9.scad"
+      (write-scad
+       rj9-holder
+       ))
+
+(spit "things/screw-insert.scad"
+      (write-scad
+         (difference
+           (screw-insert-shape (+ screw-insert-bottom-radius 1.6) (+ screw-insert-top-radius 1.6) (+ screw-insert-height 1.5) 0)
+           (screw-insert-shape screw-insert-bottom-radius screw-insert-top-radius screw-insert-height 1)
+         )
+      )
+)
+
 
 
 
